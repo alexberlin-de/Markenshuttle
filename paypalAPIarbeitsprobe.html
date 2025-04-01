@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Paypal Testflow</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #aaa;
+        }
+
+        h1,
+        p {
+            text-align: center;
+        }
+
+        .slider-wrapper {
+            width: 50vw;
+            height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+            margin: auto;
+            background-color: #fff;
+        }
+
+        .slider-wrapper p {
+            text-align: left;
+        }
+
+        .slider {
+            display: flex;
+            transition: transform 0.5s ease;
+            width: 400vw;
+            height: 100%;
+        }
+
+        .panel {
+            flex: 0 0 50vw;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        .panel h2 {
+            margin-top: 0;
+        }
+
+        button {
+            margin: 1rem 1rem 0 0;
+            padding: 1rem;
+            font-size: 1rem;
+        }
+
+        .hidden {
+            opacity: 0;
+            pointer-events: none;
+            position: absolute;
+            left: -9999px;
+        }
+
+        #paypal-button-container {
+            width: 80%;
+            margin-top: 2rem;
+            border: 1px dashed gray;
+            padding: 1rem;
+        }
+
+        .fake-paypal-button {
+            margin-right: 1rem;
+            padding: 1rem;
+            background: #0070ba;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        #overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 9999;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 1.5rem;
+        }
+        .hinweis {
+            color:red;
+            background-color:white;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Overlay -->
+    <div id="overlay">
+        Paypal arbeitet<br>
+        Bitte warten...
+    </div>
+
+    <h1>Grundgerüst für Arbeitsprobe</h1>
+    <p>Diese Seite darf nicht verlassen werden.</p>
+    <p><span class="hinweis">&nbsp;&nbsp;Bitte die Ausgabe in der Konsole beachten.&nbsp;&nbsp;</span></p>
+
+
+    <div class="slider-wrapper">
+        <div class="slider" id="slider">
+            <!-- Panel 1: Produktauswahl -->
+            <div class="panel" id="panel1">
+                <h2>Wähle ein Produkt</h2>
+                <p>
+                    Hier wird zunächst ein Produkt gewählt.<br>
+                    Name und Preis werden im Hintergrund gespeichert.
+                </p>
+                <button onclick="selectProduct('Produkt 1', 500)">Produkt 1<br>für 500€</button>
+                <button onclick="selectProduct('Produkt 2', 600)">Produkt 2<br>für 600€</button><br>
+                <button id="toPaymentButton" onclick="gotoPanel(1)" disabled>Weiter</button>
+            </div>
+
+            <!-- Panel 2: Zahlungsmethode -->
+            <div class="panel" id="panel2">
+                <h2>Wähle eine Zahlungsmethode</h2>
+                <p>
+                    Hier wird die Zahlungmethode gewählt, die an Paypal übermittelt wird.<br>
+                    Sobald der User hier auf "weiter" klickt,<br> soll über die Paypal-API <u><b>serverseitig</b></u>
+                    eine Order-ID geholt werden<br>
+                    und in Panel 4 sollen die entsprechenden Buttons aus dem Paypal-SDK gerendert werden.
+                </p>
+                <button onclick="selectMethod('PayPal')">Paypal</button>
+                <button onclick="selectMethod('Kreditkarte')">Kreditkarte</button><br>
+                <button onclick="preparePayment()">Weiter</button>
+            </div>
+
+            <!-- Panel 3: Zusammenfassung -->
+            <div class="panel" id="panel3">
+                <h2>Zusammenfassung</h2>
+                <p>Hier erfolgt die Bezahlung.</p>
+                <p id="summaryText"></p>
+                <button onclick="gotoPanel(3)">Jetzt bezahlen</button>
+            </div>
+
+            <!-- Panel 4: Zahlung -->
+            <div class="panel" id="panel4">
+                <h2>Zahlung</h2>
+                <p>
+                    An dieser Stelle sollen in der Arbeitsprobe statt der nun sichtbaren Buttons<br>die Paypal-Buttons
+                    sichtbar sein.<br>
+                    Nachdem der User seine Zahlung vorgenommen hat (oder abgebrochen hat oder WSE),<br> soll die
+                    entsprechende Rückmeldung der Paypal-API hier als Alert ausgegeben werden!<br>
+                    Auf gar keinen Fall darf auf eine "Success-Seite" oder eine "Fehler-Seite" geleitet werden!<br>
+                    Der Aufruf <b>MUSS</b> per fetch() erfolgen <br>und die Rückgabe <b>MUSS</b> auf der aufrufenden
+                    Seite (dieser) ausgegeben werden!<br>
+                    Der User darf diese Seite nicht durch den Zahlungsvorgang verlassen!
+                </p>
+                <div id="paypal-button-container">
+                    In diesem Container sollen die Paypal-Buttons gerendert werden.<br>
+                    <button class="fake-paypal-button" onclick="fakeSuccess()">Simulation: Erfolg</button>
+                    <button class="fake-paypal-button" onclick="fakeError()">Simulation: Fehler</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedProduct = null;
+        let selectedPrice = null;
+        let selectedMethod = null;
+        let orderId = null;
+
+        const slider = document.getElementById('slider');
+
+        function gotoPanel(index) {
+            slider.style.transform = `translateX(-${index * 50}vw)`;
+        }
+
+        function selectProduct(name, price) {
+            selectedProduct = name;
+            selectedPrice = price;
+            document.getElementById('toPaymentButton').disabled = false;
+            console.log(`Produktauswahl gespeichert: ${selectedProduct}`);
+        }
+
+        function selectMethod(method) {
+            selectedMethod = method;
+            console.log(`Zahlungsmethode gespeichert: ${selectedMethod}`);
+        }
+
+        function preparePayment() {
+            if (!selectedMethod) {
+                alert("Bitte Zahlungsmethode wählen");
+                return;
+            }
+
+            document.getElementById('summaryText').innerText =
+                `Sie haben "${selectedProduct}" für ${selectedPrice}€ gewählt.\nZahlungsmethode: ${selectedMethod}`;
+            gotoPanel(2);
+            // Simuliere API-Aufruf an Paypal
+            console.log("Sende Anfrage an Paypal API...");
+            fetchDummyOrder().then(id => {
+                orderId = id;
+                console.log("Order-ID erhalten:", orderId);
+                console.log("Nun werden die Paypal-Buttons gerendert.")
+            });
+        }
+
+        function fetchDummyOrder() {
+            // An dieser Stelle muss das erste fetch() erfolgen,
+            // diese könnte eine getOrder.php ansprechen
+            // die dann von Paypal ein Token holt und
+            // anhand der Bestelldaten eine Order-ID erhält
+            // die dann wieder als resolve an das fetch()
+            // zurück gegeben wird
+
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    resolve("DUMMY-ORDER-ID-123456");
+                }, 2000);
+            });
+        }
+
+        const overlay = document.getElementById('overlay');
+
+        function showOverlay() {
+            overlay.style.display = "flex";
+        }
+
+        function hideOverlay() {
+            overlay.style.display = "none";
+        }
+
+        function fakeSuccess() {
+            console.log("User auf Paypal");
+            // Hier wird die Antwort der Paypal-API empfangen
+            // und in Javascript weiterverwendet
+            // in diesem Beispiel in Form eines Alerts
+            // in der echten Anwendung werden hierdurch weitere Prozesse angestoßen
+            showOverlay();
+            setTimeout(() => {
+                console.log("Paypal Antwort empfangen");
+                alert("Zahlung erfolgreich");
+                hideOverlay();
+            }, 1000);
+        }
+
+        function fakeError() {
+            console.log("User auf Paypal");
+            // Hier wird die Antwort der Paypal-API empfangen
+            // und in Javascript weiterverwendet
+            // in diesem Beispiel in Form eines Alerts
+            // in der echten Anwendung werden hierdurch weitere Prozesse angestoßen
+            showOverlay();
+            setTimeout(() => {
+                console.log("Paypal Antwort empfangen");
+                alert("Fehler bei der Zahlung");
+                hideOverlay();
+            }, 1000);
+        }
+    </script>
+
+</body>
+
+</html>
